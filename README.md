@@ -31,3 +31,11 @@ A static web application for managing a digital flight log and transferring entr
 ## Privacy
 
 All data stays in your browser. Nothing is sent to any server.
+
+## Disclaimer
+
+This application is provided "as is", without warranty of any kind, express or implied. The author assumes no responsibility or liability for any errors, omissions, or inaccuracies in the data processing, or for any losses or damages arising from the use of this application. Use at your own risk. Always verify your flight log entries against the original source data before transferring them to an official logbook.
+
+## Built With
+
+This application was built with the help of [Claude](https://claude.ai) by Anthropic.
