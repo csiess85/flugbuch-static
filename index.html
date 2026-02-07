@@ -336,13 +336,15 @@
 </div>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="flugbuch.js"></script>
 <script>
+// Import shared pure functions from flugbuch.js (loaded as window.Flugbuch)
+const { excelTimeToSeconds, excelTimeToHHMM, secToHM, isComplete,
+        mergeAssignments, computePageSummaries, DEFAULT_ROLLE, DEFAULT_ZEIT,
+        FLIGHTS_PER_PAGE } = Flugbuch;
+
 let flights = [];
 let selectedIds = new Set();
-
-const DEFAULT_ROLLE = 'Dual';
-const DEFAULT_ZEIT = 'Tag';
-const FLIGHTS_PER_PAGE = 10;
 const STORAGE_KEY = 'flugbuch_flights';
 
 // ---------------------------------------------------------------------------
@@ -366,28 +368,8 @@ function loadFlights() {
 }
 
 // ---------------------------------------------------------------------------
-// Excel parsing (replaces Python load_excel)
+// Excel parsing
 // ---------------------------------------------------------------------------
-function excelTimeToSeconds(val) {
-  if (val == null) return 0;
-  if (typeof val === 'number') {
-    return Math.round(val * 86400);
-  }
-  return 0;
-}
-
-function excelTimeToHHMM(val) {
-  if (val == null) return '';
-  if (typeof val === 'string') return val;
-  if (typeof val === 'number') {
-    const totalSec = Math.round(val * 86400);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  }
-  return String(val);
-}
-
 function cellVal(sheet, row, col) {
   const addr = XLSX.utils.encode_cell({ r: row, c: col });
   const cell = sheet[addr];
@@ -403,9 +385,8 @@ function parseExcel(arrayBuffer) {
   const parsed = [];
   let flightIdx = 0;
 
-  // Data starts at row 3 (0-indexed row 2), rows 0-1 are title + headers
   for (let r = 2; r <= range.e.r; r++) {
-    const datum = cellVal(ws, r, 0);  // Column A
+    const datum = cellVal(ws, r, 0);
     if (datum == null) continue;
 
     flightIdx++;
@@ -436,22 +417,6 @@ function parseExcel(arrayBuffer) {
   return parsed;
 }
 
-function mergeAssignments(newFlights) {
-  const oldMap = {};
-  flights.forEach(f => {
-    const key = `${f.datum}|${f.start}|${f.kennzeichen}`;
-    oldMap[key] = { rolle: f.rolle, zeit: f.zeit, seite: f.seite };
-  });
-  newFlights.forEach(f => {
-    const key = `${f.datum}|${f.start}|${f.kennzeichen}`;
-    if (oldMap[key]) {
-      f.rolle = oldMap[key].rolle;
-      f.zeit = oldMap[key].zeit;
-      if (oldMap[key].seite != null) f.seite = oldMap[key].seite;
-    }
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Upload / Export / Import
 // ---------------------------------------------------------------------------
@@ -462,7 +427,7 @@ function uploadExcel(input) {
   reader.onload = function(e) {
     const newFlights = parseExcel(e.target.result);
     if (flights.length > 0) {
-      mergeAssignments(newFlights);
+      mergeAssignments(flights, newFlights);
     }
     flights = newFlights;
     saveFlights();
@@ -516,23 +481,12 @@ function importData(input) {
 // ---------------------------------------------------------------------------
 // Display helpers
 // ---------------------------------------------------------------------------
-function secToHM(sec) {
-  if (!sec) return '0:00';
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  return `${h}:${m.toString().padStart(2, '0')}`;
-}
-
 function updateFilterOptions() {
   const sel = document.getElementById('filter-seite');
   const pages = [...new Set(flights.filter(f => f.seite).map(f => f.seite))].sort((a,b) => a - b);
   sel.innerHTML = '<option value="">Alle Seiten</option>' +
     pages.map(p => `<option value="${p}">Seite ${p}</option>`).join('') +
     '<option value="none">Ohne Seite</option>';
-}
-
-function isComplete(f) {
-  return f.rolle && f.zeit && f.seite;
 }
 
 // ---------------------------------------------------------------------------
@@ -698,37 +652,7 @@ function renderPages() {
     return;
   }
 
-  const pageSummaries = {};
-  let cumPicSec = 0, cumDualSec = 0, cumLdgTag = 0, cumLdgNacht = 0, cumNachtSec = 0;
-
-  pageNums.forEach(pn => {
-    const pFlights = pageMap[pn];
-    const curPicSec = pFlights.filter(f => f.rolle === 'PIC').reduce((s, f) => s + (f.blockzeit_sec || 0), 0);
-    const curDualSec = pFlights.filter(f => f.rolle === 'Dual').reduce((s, f) => s + (f.blockzeit_sec || 0), 0);
-    const curLdgTag = pFlights.filter(f => f.zeit === 'Tag').reduce((s, f) => s + f.landungen, 0);
-    const curLdgNacht = pFlights.filter(f => f.zeit === 'Nacht').reduce((s, f) => s + f.landungen, 0);
-    const curNachtSec = pFlights.filter(f => f.zeit === 'Nacht').reduce((s, f) => s + (f.blockzeit_sec || 0), 0);
-    const curTotalSec = curPicSec + curDualSec;
-
-    const prevPicSec = cumPicSec;
-    const prevDualSec = cumDualSec;
-    const prevLdgTag = cumLdgTag;
-    const prevLdgNacht = cumLdgNacht;
-    const prevNachtSec = cumNachtSec;
-    const prevTotalSec = cumPicSec + cumDualSec;
-
-    cumPicSec += curPicSec;
-    cumDualSec += curDualSec;
-    cumLdgTag += curLdgTag;
-    cumLdgNacht += curLdgNacht;
-    cumNachtSec += curNachtSec;
-
-    pageSummaries[pn] = {
-      current: { totalSec: curTotalSec, picSec: curPicSec, dualSec: curDualSec, ldgTag: curLdgTag, ldgNacht: curLdgNacht, nachtSec: curNachtSec },
-      previous: { totalSec: prevTotalSec, picSec: prevPicSec, dualSec: prevDualSec, ldgTag: prevLdgTag, ldgNacht: prevLdgNacht, nachtSec: prevNachtSec },
-      total: { totalSec: cumPicSec + cumDualSec, picSec: cumPicSec, dualSec: cumDualSec, ldgTag: cumLdgTag, ldgNacht: cumLdgNacht, nachtSec: cumNachtSec }
-    };
-  });
+  const pageSummaries = computePageSummaries(flights);
 
   container.innerHTML = pageNums.map(pn => {
     const pFlights = pageMap[pn];

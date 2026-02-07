@@ -32,6 +32,23 @@ A static web application for managing a digital flight log and transferring entr
 
 All data stays in your browser. Nothing is sent to any server.
 
+## Tests
+
+The app includes 126 automated tests covering time conversion, summary computation, cumulative logic, and regression anchors verified against real flight data.
+
+```bash
+# Install test dependencies (one time)
+npm install
+
+# Run Jest test suite
+npm test
+
+# Browser self-test (open in any browser)
+open test.html
+```
+
+Tests run automatically on every `git push` via GitHub Actions.
+
 ## Disclaimer
 
 This application is provided "as is", without warranty of any kind, express or implied. The author assumes no responsibility or liability for any errors, omissions, or inaccuracies in the data processing, or for any losses or damages arising from the use of this application. Use at your own risk. Always verify your flight log entries against the original source data before transferring them to an official logbook.

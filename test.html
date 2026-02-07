@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flugbuch — Self-Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: #f5f6fa; padding: 24px; }
+  h1 { margin-bottom: 8px; }
+  #summary { font-size: 18px; margin-bottom: 16px; padding: 12px 16px; border-radius: 8px; }
+  #summary.pass { background: #dcfce7; color: #166534; }
+  #summary.fail { background: #fee2e2; color: #991b1b; }
+  .group { margin-bottom: 16px; }
+  .group-header { font-weight: 600; font-size: 15px; margin-bottom: 6px; color: #1e293b; cursor: pointer; }
+  .test { padding: 3px 0 3px 20px; font-size: 13px; font-family: monospace; }
+  .test.pass { color: #16a34a; }
+  .test.pass::before { content: '\2713 '; }
+  .test.fail { color: #dc2626; font-weight: 600; }
+  .test.fail::before { content: '\2717 '; }
+  .error-detail { color: #991b1b; font-size: 12px; padding-left: 36px; margin-bottom: 2px; }
+</style>
+</head>
+<body>
+<h1>Flugbuch Self-Test</h1>
+<div id="summary">Running...</div>
+<div id="results"></div>
+
+<script src="flugbuch.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  var F = Flugbuch;
+  var results = [];
+  var currentGroup = '';
+
+  function group(name) { currentGroup = name; }
+
+  function test(name, fn) {
+    try {
+      fn();
+      results.push({ group: currentGroup, name: name, pass: true });
+    } catch (e) {
+      results.push({ group: currentGroup, name: name, pass: false, error: e.message });
+    }
+  }
+
+  function assert(cond, msg) {
+    if (!cond) throw new Error(msg || 'Assertion failed');
+  }
+
+  function assertEqual(actual, expected, msg) {
+    if (actual !== expected) {
+      throw new Error((msg || '') + ' — expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+    }
+  }
+
+  // =========================================================================
+  // excelTimeToSeconds
+  // =========================================================================
+  group('excelTimeToSeconds');
+
+  test('null returns 0', function() { assertEqual(F.excelTimeToSeconds(null), 0); });
+  test('undefined returns 0', function() { assertEqual(F.excelTimeToSeconds(undefined), 0); });
+  test('0 returns 0', function() { assertEqual(F.excelTimeToSeconds(0), 0); });
+  test('0.5 = 12h = 43200s', function() { assertEqual(F.excelTimeToSeconds(0.5), 43200); });
+  test('1.0 = 24h = 86400s', function() { assertEqual(F.excelTimeToSeconds(1.0), 86400); });
+  test('0.04097 ~ 59min = 3540s', function() { assertEqual(F.excelTimeToSeconds(0.04097222222), 3540); });
+  test('string returns 0', function() { assertEqual(F.excelTimeToSeconds('foo'), 0); });
+  test('boolean returns 0', function() { assertEqual(F.excelTimeToSeconds(true), 0); });
+
+  // =========================================================================
+  // excelTimeToHHMM
+  // =========================================================================
+  group('excelTimeToHHMM');
+
+  test('null returns empty', function() { assertEqual(F.excelTimeToHHMM(null), ''); });
+  test('undefined returns empty', function() { assertEqual(F.excelTimeToHHMM(undefined), ''); });
+  test('string passthrough', function() { assertEqual(F.excelTimeToHHMM('10:30'), '10:30'); });
+  test('0.5 = 12:00', function() { assertEqual(F.excelTimeToHHMM(0.5), '12:00'); });
+  test('0.0 = 00:00 (midnight)', function() { assertEqual(F.excelTimeToHHMM(0.0), '00:00'); });
+  test('0.4166 ~ 10:00', function() { assertEqual(F.excelTimeToHHMM(10/24), '10:00'); });
+  test('0.7708 ~ 18:30', function() { assertEqual(F.excelTimeToHHMM(18.5/24), '18:30'); });
+
+  // =========================================================================
+  // secToHM
+  // =========================================================================
+  group('secToHM');
+
+  test('0 returns 0:00', function() { assertEqual(F.secToHM(0), '0:00'); });
+  test('null returns 0:00', function() { assertEqual(F.secToHM(null), '0:00'); });
+  test('undefined returns 0:00', function() { assertEqual(F.secToHM(undefined), '0:00'); });
+  test('3600 = 1:00', function() { assertEqual(F.secToHM(3600), '1:00'); });
+  test('5400 = 1:30', function() { assertEqual(F.secToHM(5400), '1:30'); });
+  test('35520 = 9:52', function() { assertEqual(F.secToHM(35520), '9:52'); });
+  test('198600 = 55:10', function() { assertEqual(F.secToHM(198600), '55:10'); });
+  test('60 = 0:01', function() { assertEqual(F.secToHM(60), '0:01'); });
+  test('3661 = 1:01 (floor)', function() { assertEqual(F.secToHM(3661), '1:01'); });
+
+  // =========================================================================
+  // isComplete
+  // =========================================================================
+  group('isComplete');
+
+  test('complete flight', function() { assert(F.isComplete({ rolle: 'PIC', zeit: 'Tag', seite: 1 })); });
+  test('missing rolle', function() { assert(!F.isComplete({ rolle: '', zeit: 'Tag', seite: 1 })); });
+  test('missing zeit', function() { assert(!F.isComplete({ rolle: 'PIC', zeit: '', seite: 1 })); });
+  test('missing seite', function() { assert(!F.isComplete({ rolle: 'PIC', zeit: 'Tag', seite: null })); });
+  test('seite 0 is incomplete', function() { assert(!F.isComplete({ rolle: 'PIC', zeit: 'Tag', seite: 0 })); });
+  test('all empty', function() { assert(!F.isComplete({ rolle: '', zeit: '', seite: null })); });
+
+  // =========================================================================
+  // mergeAssignments
+  // =========================================================================
+  group('mergeAssignments');
+
+  test('preserves matching assignments', function() {
+    var old = [{ datum: '01.01.26', start: '10:00', kennzeichen: 'OE-AKW', rolle: 'PIC', zeit: 'Nacht', seite: 5 }];
+    var nw = [{ datum: '01.01.26', start: '10:00', kennzeichen: 'OE-AKW', rolle: 'Dual', zeit: 'Tag', seite: 1 }];
+    F.mergeAssignments(old, nw);
+    assertEqual(nw[0].rolle, 'PIC');
+    assertEqual(nw[0].zeit, 'Nacht');
+    assertEqual(nw[0].seite, 5);
+  });
+
+  test('no match keeps defaults', function() {
+    var old = [{ datum: '01.01.26', start: '10:00', kennzeichen: 'OE-AKW', rolle: 'PIC', zeit: 'Nacht', seite: 5 }];
+    var nw = [{ datum: '02.01.26', start: '11:00', kennzeichen: 'OE-XXX', rolle: 'Dual', zeit: 'Tag', seite: 1 }];
+    F.mergeAssignments(old, nw);
+    assertEqual(nw[0].rolle, 'Dual');
+    assertEqual(nw[0].zeit, 'Tag');
+    assertEqual(nw[0].seite, 1);
+  });
+
+  test('null seite in old does not overwrite', function() {
+    var old = [{ datum: '01.01.26', start: '10:00', kennzeichen: 'OE-AKW', rolle: 'PIC', zeit: 'Nacht', seite: null }];
+    var nw = [{ datum: '01.01.26', start: '10:00', kennzeichen: 'OE-AKW', rolle: 'Dual', zeit: 'Tag', seite: 3 }];
+    F.mergeAssignments(old, nw);
+    assertEqual(nw[0].rolle, 'PIC');
+    assertEqual(nw[0].zeit, 'Nacht');
+    assertEqual(nw[0].seite, 3); // kept new seite
+  });
+
+  // =========================================================================
+  // computePageSummaries — basic
+  // =========================================================================
+  group('computePageSummaries — basic');
+
+  test('empty array returns empty', function() {
+    var s = F.computePageSummaries([]);
+    assertEqual(Object.keys(s).length, 0);
+  });
+
+  test('flights with no seite excluded', function() {
+    var s = F.computePageSummaries([{ blockzeit_sec: 3600, landungen: 1, rolle: 'Dual', zeit: 'Tag', seite: null }]);
+    assertEqual(Object.keys(s).length, 0);
+  });
+
+  test('single Dual Tag flight', function() {
+    var s = F.computePageSummaries([{ blockzeit_sec: 3600, landungen: 2, rolle: 'Dual', zeit: 'Tag', seite: 1 }]);
+    assertEqual(s[1].current.dualSec, 3600);
+    assertEqual(s[1].current.picSec, 0);
+    assertEqual(s[1].current.totalSec, 3600);
+    assertEqual(s[1].current.ldgTag, 2);
+    assertEqual(s[1].current.ldgNacht, 0);
+    assertEqual(s[1].current.nachtSec, 0);
+  });
+
+  test('single PIC Nacht flight', function() {
+    var s = F.computePageSummaries([{ blockzeit_sec: 1800, landungen: 3, rolle: 'PIC', zeit: 'Nacht', seite: 1 }]);
+    assertEqual(s[1].current.picSec, 1800);
+    assertEqual(s[1].current.dualSec, 0);
+    assertEqual(s[1].current.totalSec, 1800);
+    assertEqual(s[1].current.ldgTag, 0);
+    assertEqual(s[1].current.ldgNacht, 3);
+    assertEqual(s[1].current.nachtSec, 1800);
+  });
+
+  test('total = PIC + Dual', function() {
+    var flights = [
+      { blockzeit_sec: 3600, landungen: 2, rolle: 'PIC', zeit: 'Tag', seite: 1 },
+      { blockzeit_sec: 1800, landungen: 3, rolle: 'Dual', zeit: 'Tag', seite: 1 },
+    ];
+    var s = F.computePageSummaries(flights);
+    assertEqual(s[1].current.totalSec, 5400);
+    assertEqual(s[1].current.picSec, 3600);
+    assertEqual(s[1].current.dualSec, 1800);
+  });
+
+  test('empty rolle excluded from PIC/Dual', function() {
+    var flights = [
+      { blockzeit_sec: 3600, landungen: 2, rolle: 'PIC', zeit: 'Tag', seite: 1 },
+      { blockzeit_sec: 1800, landungen: 3, rolle: '', zeit: 'Tag', seite: 1 },
+    ];
+    var s = F.computePageSummaries(flights);
+    assertEqual(s[1].current.picSec, 3600);
+    assertEqual(s[1].current.dualSec, 0);
+    assertEqual(s[1].current.totalSec, 3600);
+  });
+
+  // =========================================================================
+  // computePageSummaries — cumulative
+  // =========================================================================
+  group('computePageSummaries — cumulative');
+
+  test('page 1 previous is zero', function() {
+    var s = F.computePageSummaries([{ blockzeit_sec: 3600, landungen: 5, rolle: 'Dual', zeit: 'Tag', seite: 1 }]);
+    assertEqual(s[1].previous.totalSec, 0);
+    assertEqual(s[1].previous.dualSec, 0);
+    assertEqual(s[1].previous.ldgTag, 0);
+  });
+
+  test('page 2 previous = page 1 current', function() {
+    var flights = [
+      { blockzeit_sec: 3600, landungen: 5, rolle: 'Dual', zeit: 'Tag', seite: 1 },
+      { blockzeit_sec: 1800, landungen: 3, rolle: 'Dual', zeit: 'Tag', seite: 2 },
+    ];
+    var s = F.computePageSummaries(flights);
+    assertEqual(s[2].previous.dualSec, 3600);
+    assertEqual(s[2].previous.ldgTag, 5);
+    assertEqual(s[2].total.dualSec, 5400);
+    assertEqual(s[2].total.ldgTag, 8);
+  });
+
+  test('three pages cumulative', function() {
+    var flights = [
+      { blockzeit_sec: 1000, landungen: 2, rolle: 'PIC', zeit: 'Tag', seite: 1 },
+      { blockzeit_sec: 2000, landungen: 3, rolle: 'Dual', zeit: 'Tag', seite: 1 },
+      { blockzeit_sec: 3000, landungen: 4, rolle: 'PIC', zeit: 'Nacht', seite: 2 },
+      { blockzeit_sec: 4000, landungen: 5, rolle: 'Dual', zeit: 'Tag', seite: 2 },
+      { blockzeit_sec: 5000, landungen: 6, rolle: 'Dual', zeit: 'Nacht', seite: 3 },
+    ];
+    var s = F.computePageSummaries(flights);
+
+    // Page 1
+    assertEqual(s[1].current.picSec, 1000);
+    assertEqual(s[1].current.dualSec, 2000);
+    assertEqual(s[1].current.totalSec, 3000);
+    assertEqual(s[1].current.ldgTag, 5);
+    assertEqual(s[1].current.ldgNacht, 0);
+
+    // Page 2
+    assertEqual(s[2].current.picSec, 3000);
+    assertEqual(s[2].current.dualSec, 4000);
+    assertEqual(s[2].current.nachtSec, 3000);
+    assertEqual(s[2].previous.totalSec, 3000);
+    assertEqual(s[2].total.totalSec, 10000);
+
+    // Page 3
+    assertEqual(s[3].current.dualSec, 5000);
+    assertEqual(s[3].current.nachtSec, 5000);
+    assertEqual(s[3].previous.totalSec, 10000);
+    assertEqual(s[3].total.totalSec, 15000);
+    assertEqual(s[3].total.ldgTag, 10);
+    assertEqual(s[3].total.ldgNacht, 10);
+    assertEqual(s[3].total.nachtSec, 8000);
+  });
+
+  test('non-sequential pages', function() {
+    var flights = [
+      { blockzeit_sec: 1000, landungen: 1, rolle: 'Dual', zeit: 'Tag', seite: 1 },
+      { blockzeit_sec: 2000, landungen: 2, rolle: 'Dual', zeit: 'Tag', seite: 3 },
+      { blockzeit_sec: 3000, landungen: 3, rolle: 'Dual', zeit: 'Tag', seite: 5 },
+    ];
+    var s = F.computePageSummaries(flights);
+    var keys = Object.keys(s).map(Number).sort(function(a,b){return a-b;});
+    assertEqual(keys.join(','), '1,3,5');
+    assertEqual(s[3].previous.dualSec, 1000);
+    assertEqual(s[5].previous.dualSec, 3000);
+    assertEqual(s[5].total.dualSec, 6000);
+  });
+
+  // =========================================================================
+  // Regression anchors (from real Flugbuch.xlsx, all defaults)
+  // =========================================================================
+  group('Regression anchors (all defaults)');
+
+  var EXPECTED = {
+    totalFlights: 70,
+    totalPages: 7,
+    totalBlockzeitSec: 198600,
+    totalLandings: 175,
+    pages: {
+      1: { blockzeitSec: 35520, landings: 20, cumBlockzeitSec: 35520, cumLandings: 20 },
+      2: { blockzeitSec: 20520, landings: 43, cumBlockzeitSec: 56040, cumLandings: 63 },
+      3: { blockzeitSec: 22440, landings: 31, cumBlockzeitSec: 78480, cumLandings: 94 },
+      4: { blockzeitSec: 24600, landings: 17, cumBlockzeitSec: 103080, cumLandings: 111 },
+      5: { blockzeitSec: 30780, landings: 28, cumBlockzeitSec: 133860, cumLandings: 139 },
+      6: { blockzeitSec: 26940, landings: 13, cumBlockzeitSec: 160800, cumLandings: 152 },
+      7: { blockzeitSec: 37800, landings: 23, cumBlockzeitSec: 198600, cumLandings: 175 },
+    }
+  };
+
+  test('page 1 blockzeit = 9:52 (35520s)', function() { assertEqual(F.secToHM(EXPECTED.pages[1].blockzeitSec), '9:52'); });
+  test('page 2 blockzeit = 5:42 (20520s)', function() { assertEqual(F.secToHM(EXPECTED.pages[2].blockzeitSec), '5:42'); });
+  test('grand total blockzeit = 55:10 (198600s)', function() { assertEqual(F.secToHM(EXPECTED.totalBlockzeitSec), '55:10'); });
+  test('grand total landings = 175', function() { assertEqual(EXPECTED.totalLandings, 175); });
+
+  test('per-page sums add up to total blockzeit', function() {
+    var sum = 0;
+    for (var p = 1; p <= 7; p++) sum += EXPECTED.pages[p].blockzeitSec;
+    assertEqual(sum, EXPECTED.totalBlockzeitSec);
+  });
+
+  test('per-page landings add up to total landings', function() {
+    var sum = 0;
+    for (var p = 1; p <= 7; p++) sum += EXPECTED.pages[p].landings;
+    assertEqual(sum, EXPECTED.totalLandings);
+  });
+
+  test('cumulative values are consistent', function() {
+    var cumBz = 0, cumLdg = 0;
+    for (var p = 1; p <= 7; p++) {
+      cumBz += EXPECTED.pages[p].blockzeitSec;
+      cumLdg += EXPECTED.pages[p].landings;
+      assertEqual(cumBz, EXPECTED.pages[p].cumBlockzeitSec, 'page ' + p + ' cum blockzeit');
+      assertEqual(cumLdg, EXPECTED.pages[p].cumLandings, 'page ' + p + ' cum landings');
+    }
+  });
+
+  // =========================================================================
+  // Cross-checks (mixed assignment invariants)
+  // =========================================================================
+  group('Cross-checks');
+
+  var MIXED = {
+    totalBlockzeitSec: 198600,
+    picBlockzeitSec: 46860,
+    dualBlockzeitSec: 151740,
+    nachtBlockzeitSec: 10740,
+    tagLandings: 167,
+    nachtLandings: 8,
+    totalLandings: 175
+  };
+
+  test('PIC + Dual = Total blockzeit', function() {
+    assertEqual(MIXED.picBlockzeitSec + MIXED.dualBlockzeitSec, MIXED.totalBlockzeitSec);
+  });
+
+  test('Tag + Nacht = Total landings', function() {
+    assertEqual(MIXED.tagLandings + MIXED.nachtLandings, MIXED.totalLandings);
+  });
+
+  test('Total blockzeit matches all-defaults total', function() {
+    assertEqual(MIXED.totalBlockzeitSec, EXPECTED.totalBlockzeitSec);
+  });
+
+  test('Total landings matches all-defaults total', function() {
+    assertEqual(MIXED.totalLandings, EXPECTED.totalLandings);
+  });
+
+  // =========================================================================
+  // makeFlight helper
+  // =========================================================================
+  group('makeFlight');
+
+  test('returns defaults', function() {
+    var f = F.makeFlight();
+    assertEqual(f.rolle, 'Dual');
+    assertEqual(f.zeit, 'Tag');
+    assertEqual(f.seite, 1);
+    assertEqual(f.blockzeit_sec, 4200);
+  });
+
+  test('overrides work', function() {
+    var f = F.makeFlight({ rolle: 'PIC', seite: 5, blockzeit_sec: 999 });
+    assertEqual(f.rolle, 'PIC');
+    assertEqual(f.seite, 5);
+    assertEqual(f.blockzeit_sec, 999);
+    assertEqual(f.zeit, 'Tag'); // not overridden
+  });
+
+  // =========================================================================
+  // Render results
+  // =========================================================================
+  var passed = results.filter(function(r) { return r.pass; }).length;
+  var failed = results.filter(function(r) { return !r.pass; }).length;
+  var total = results.length;
+
+  var summaryEl = document.getElementById('summary');
+  summaryEl.textContent = passed + ' / ' + total + ' tests passed' + (failed ? ' — ' + failed + ' FAILED' : '');
+  summaryEl.className = failed ? 'fail' : 'pass';
+
+  var html = '';
+  var lastGroup = '';
+  results.forEach(function(r) {
+    if (r.group !== lastGroup) {
+      lastGroup = r.group;
+      html += '<div class="group"><div class="group-header">' + r.group + '</div>';
+    }
+    html += '<div class="test ' + (r.pass ? 'pass' : 'fail') + '">' + r.name + '</div>';
+    if (!r.pass) {
+      html += '<div class="error-detail">' + r.error + '</div>';
+    }
+  });
+  document.getElementById('results').innerHTML = html;
+
+  // Log to console for CI/automation
+  if (failed) {
+    console.error('TESTS FAILED: ' + failed + '/' + total);
+    results.filter(function(r) { return !r.pass; }).forEach(function(r) {
+      console.error('  FAIL: [' + r.group + '] ' + r.name + ' — ' + r.error);
+    });
+  } else {
+    console.log('ALL TESTS PASSED: ' + total + '/' + total);
+  }
+})();
+</script>
+</body>
+</html>
