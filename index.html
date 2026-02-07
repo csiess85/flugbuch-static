@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flugbuch Manager</title>
+<style>
+  :root {
+    --bg: #f5f6fa;
+    --card: #fff;
+    --border: #ddd;
+    --primary: #2563eb;
+    --primary-light: #dbeafe;
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --success: #16a34a;
+    --warning: #f59e0b;
+    --page-header: #1e40af;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header {
+    background: var(--page-header);
+    color: #fff;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  header h1 { font-size: 20px; font-weight: 600; }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-secondary { background: rgba(255,255,255,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.3); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.3); }
+  .btn-sm { padding: 4px 8px; font-size: 12px; }
+
+  .upload-area {
+    display: inline-block;
+    position: relative;
+  }
+  .upload-area input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .view-tabs {
+    display: flex;
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    position: sticky;
+    top: 52px;
+    z-index: 99;
+  }
+  .view-tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+  .view-tab:hover { color: var(--text); }
+  .view-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+  .container { max-width: 1600px; margin: 0 auto; padding: 16px 24px; }
+
+  .flight-table-wrap { overflow-x: auto; background: var(--card); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+  th { background: #f1f5f9; color: var(--text-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+  tr:hover td { background: #f8fafc; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .cell-select {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 13px;
+    background: #fff;
+    cursor: pointer;
+    min-width: 70px;
+  }
+  .cell-select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px var(--primary-light); }
+  .cell-select.set-pic { background: #dcfce7; border-color: #86efac; }
+  .cell-select.set-dual { background: #dbeafe; border-color: #93c5fd; }
+  .cell-select.set-tag { background: #fef9c3; border-color: #fde047; }
+  .cell-select.set-nacht { background: #e0e7ff; border-color: #a5b4fc; }
+
+  .page-input {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 13px;
+    width: 55px;
+    text-align: center;
+  }
+  .page-input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px var(--primary-light); }
+
+  tr.unassigned { background: #fff7ed; }
+  tr.unassigned td:first-child { border-left: 3px solid var(--warning); }
+
+  .page-section { margin-bottom: 24px; }
+  .page-header {
+    background: var(--page-header);
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+  }
+  .page-body { background: var(--card); border-radius: 0 0 8px 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  .summary-row {
+    display: flex;
+    flex-direction: column;
+    border-top: 2px solid var(--page-header);
+  }
+  .summary-block {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+  .summary-block:last-child { border-bottom: none; }
+  .summary-block h4 {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    min-width: 200px;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  .summary-items { display: flex; gap: 24px; flex-wrap: wrap; }
+  .summary-item { display: flex; gap: 6px; font-size: 13px; }
+  .summary-item .s-label { color: var(--text-muted); }
+  .summary-item .s-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .banner {
+    background: #fef3c7;
+    border: 1px solid #fbbf24;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .banner strong { color: #92400e; }
+  .banner.success { background: #dcfce7; border-color: #86efac; }
+  .banner.success strong { color: #166534; }
+  .banner.info { background: #dbeafe; border-color: #93c5fd; }
+  .banner.info strong { color: #1e40af; }
+
+  .hidden { display: none; }
+
+  .bulk-bar {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .bulk-bar label { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+
+  .filter-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .filter-bar label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+  .filter-bar select, .filter-bar input {
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+  }
+
+  .welcome-box {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+  }
+  .welcome-box h2 { font-size: 24px; color: var(--text); margin-bottom: 12px; }
+  .welcome-box p { font-size: 15px; margin-bottom: 20px; }
+  .welcome-box .upload-area-big {
+    display: inline-block;
+    position: relative;
+    background: var(--primary);
+    color: #fff;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .welcome-box .upload-area-big:hover { background: #1d4ed8; }
+  .welcome-box .upload-area-big input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  @media (max-width: 900px) {
+    .container { padding: 8px; }
+    th, td { padding: 6px 6px; font-size: 12px; }
+    .summary-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Flugbuch Manager</h1>
+  <div class="header-actions">
+    <div class="upload-area">
+      <button class="btn btn-secondary">Excel hochladen</button>
+      <input type="file" accept=".xlsx,.xls" onchange="uploadExcel(this)">
+    </div>
+    <button class="btn btn-secondary" onclick="exportData()">Daten exportieren</button>
+    <div class="upload-area">
+      <button class="btn btn-secondary">Daten importieren</button>
+      <input type="file" accept=".json" onchange="importData(this)">
+    </div>
+    <button class="btn btn-primary" onclick="saveAll()">Speichern</button>
+  </div>
+</header>
+
+<div class="view-tabs">
+  <div class="view-tab active" data-view="flights" onclick="switchView('flights')">Alle Fluege</div>
+  <div class="view-tab" data-view="pages" onclick="switchView('pages')">Seiten-Ansicht</div>
+  <div class="view-tab" data-view="unassigned" onclick="switchView('unassigned')">Nicht zugeordnet</div>
+</div>
+
+<div class="container">
+  <div id="view-flights">
+    <div class="bulk-bar">
+      <label>Markierte Zeilen:</label>
+      <select id="bulk-rolle" class="cell-select">
+        <option value="">Rolle...</option>
+        <option value="PIC">PIC</option>
+        <option value="Dual">Dual</option>
+      </select>
+      <select id="bulk-zeit" class="cell-select">
+        <option value="">Tageszeit...</option>
+        <option value="Tag">Tag</option>
+        <option value="Nacht">Nacht</option>
+      </select>
+      <input id="bulk-seite" type="number" min="1" class="page-input" placeholder="Seite">
+      <button class="btn btn-primary btn-sm" onclick="applyBulk()">Anwenden</button>
+      <button class="btn btn-sm" style="background:#e2e8f0" onclick="toggleSelectAll()">Alle / Keine</button>
+    </div>
+
+    <div class="filter-bar">
+      <label>Filter:</label>
+      <select id="filter-rolle" onchange="renderFlights()">
+        <option value="">Alle Rollen</option>
+        <option value="PIC">PIC</option>
+        <option value="Dual">Dual</option>
+      </select>
+      <select id="filter-seite" onchange="renderFlights()">
+        <option value="">Alle Seiten</option>
+      </select>
+      <select id="filter-status" onchange="renderFlights()">
+        <option value="">Alle Status</option>
+        <option value="complete">Vollstaendig</option>
+        <option value="incomplete">Unvollstaendig</option>
+      </select>
+    </div>
+
+    <div class="flight-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="select-all" onchange="toggleSelectAll()"></th>
+            <th>#</th>
+            <th>Datum</th>
+            <th>LFZ Typ</th>
+            <th>Kennzeichen</th>
+            <th>Crew</th>
+            <th>Von</th>
+            <th>Nach</th>
+            <th>Start</th>
+            <th>Landung</th>
+            <th>Ldg</th>
+            <th>Flugzeit</th>
+            <th>Blockzeit</th>
+            <th>Bemerkung</th>
+            <th>Rolle</th>
+            <th>Tag/Nacht</th>
+            <th>Seite</th>
+          </tr>
+        </thead>
+        <tbody id="flights-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="view-pages" class="hidden"></div>
+  <div id="view-unassigned" class="hidden"></div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+let flights = [];
+let selectedIds = new Set();
+
+const DEFAULT_ROLLE = 'Dual';
+const DEFAULT_ZEIT = 'Tag';
+const FLIGHTS_PER_PAGE = 10;
+const STORAGE_KEY = 'flugbuch_flights';
+
+// ---------------------------------------------------------------------------
+// Persistence: localStorage
+// ---------------------------------------------------------------------------
+function saveFlights() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(flights));
+}
+
+function loadFlights() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      flights = JSON.parse(saved);
+    } catch (e) {
+      flights = [];
+    }
+  }
+  updateFilterOptions();
+  renderCurrentView();
+}
+
+// ---------------------------------------------------------------------------
+// Excel parsing (replaces Python load_excel)
+// ---------------------------------------------------------------------------
+function excelTimeToSeconds(val) {
+  if (val == null) return 0;
+  if (typeof val === 'number') {
+    return Math.round(val * 86400);
+  }
+  return 0;
+}
+
+function excelTimeToHHMM(val) {
+  if (val == null) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number') {
+    const totalSec = Math.round(val * 86400);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  }
+  return String(val);
+}
+
+function cellVal(sheet, row, col) {
+  const addr = XLSX.utils.encode_cell({ r: row, c: col });
+  const cell = sheet[addr];
+  if (!cell) return null;
+  return cell.v;
+}
+
+function parseExcel(arrayBuffer) {
+  const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+
+  const parsed = [];
+  let flightIdx = 0;
+
+  // Data starts at row 3 (0-indexed row 2), rows 0-1 are title + headers
+  for (let r = 2; r <= range.e.r; r++) {
+    const datum = cellVal(ws, r, 0);  // Column A
+    if (datum == null) continue;
+
+    flightIdx++;
+    const pageNum = Math.ceil(flightIdx / FLIGHTS_PER_PAGE);
+
+    parsed.push({
+      id: flightIdx,
+      datum: String(datum),
+      lfz_typ: cellVal(ws, r, 1) || '',
+      kennzeichen: cellVal(ws, r, 2) || '',
+      crew: cellVal(ws, r, 3) || '',
+      von: cellVal(ws, r, 4) || '',
+      nach: cellVal(ws, r, 5) || '',
+      start: excelTimeToHHMM(cellVal(ws, r, 6)),
+      landung: excelTimeToHHMM(cellVal(ws, r, 7)),
+      block_off: excelTimeToHHMM(cellVal(ws, r, 8)),
+      block_on: excelTimeToHHMM(cellVal(ws, r, 9)),
+      landungen: cellVal(ws, r, 10) || 0,
+      flugstunden_sec: excelTimeToSeconds(cellVal(ws, r, 11)),
+      blockzeit_sec: excelTimeToSeconds(cellVal(ws, r, 12)),
+      bemerkung: cellVal(ws, r, 14) || '',
+      rolle: DEFAULT_ROLLE,
+      zeit: DEFAULT_ZEIT,
+      seite: pageNum,
+    });
+  }
+
+  return parsed;
+}
+
+function mergeAssignments(newFlights) {
+  const oldMap = {};
+  flights.forEach(f => {
+    const key = `${f.datum}|${f.start}|${f.kennzeichen}`;
+    oldMap[key] = { rolle: f.rolle, zeit: f.zeit, seite: f.seite };
+  });
+  newFlights.forEach(f => {
+    const key = `${f.datum}|${f.start}|${f.kennzeichen}`;
+    if (oldMap[key]) {
+      f.rolle = oldMap[key].rolle;
+      f.zeit = oldMap[key].zeit;
+      if (oldMap[key].seite != null) f.seite = oldMap[key].seite;
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Upload / Export / Import
+// ---------------------------------------------------------------------------
+function uploadExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const newFlights = parseExcel(e.target.result);
+    if (flights.length > 0) {
+      mergeAssignments(newFlights);
+    }
+    flights = newFlights;
+    saveFlights();
+    updateFilterOptions();
+    renderCurrentView();
+    alert(`${flights.length} Fluege aus "${file.name}" geladen.`);
+  };
+  reader.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function exportData() {
+  if (flights.length === 0) {
+    alert('Keine Daten zum Exportieren.');
+    return;
+  }
+  const json = JSON.stringify({ flights: flights }, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'flugbuch_data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.flights && Array.isArray(data.flights)) {
+        flights = data.flights;
+        saveFlights();
+        updateFilterOptions();
+        renderCurrentView();
+        alert(`${flights.length} Fluege importiert.`);
+      } else {
+        alert('Ungueltiges Dateiformat: "flights" Array nicht gefunden.');
+      }
+    } catch (err) {
+      alert('Fehler beim Lesen der JSON-Datei: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ---------------------------------------------------------------------------
+// Display helpers
+// ---------------------------------------------------------------------------
+function secToHM(sec) {
+  if (!sec) return '0:00';
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return `${h}:${m.toString().padStart(2, '0')}`;
+}
+
+function updateFilterOptions() {
+  const sel = document.getElementById('filter-seite');
+  const pages = [...new Set(flights.filter(f => f.seite).map(f => f.seite))].sort((a,b) => a - b);
+  sel.innerHTML = '<option value="">Alle Seiten</option>' +
+    pages.map(p => `<option value="${p}">Seite ${p}</option>`).join('') +
+    '<option value="none">Ohne Seite</option>';
+}
+
+function isComplete(f) {
+  return f.rolle && f.zeit && f.seite;
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+function renderFlights() {
+  const filterRolle = document.getElementById('filter-rolle').value;
+  const filterSeite = document.getElementById('filter-seite').value;
+  const filterStatus = document.getElementById('filter-status').value;
+
+  if (flights.length === 0) {
+    document.getElementById('flights-body').innerHTML = '';
+    const container = document.getElementById('view-flights');
+    if (!document.getElementById('welcome-msg')) {
+      const welcome = document.createElement('div');
+      welcome.id = 'welcome-msg';
+      welcome.className = 'welcome-box';
+      welcome.innerHTML = `
+        <h2>Willkommen im Flugbuch Manager</h2>
+        <p>Lade dein Excel-Flugbuch hoch, um zu beginnen.</p>
+        <div class="upload-area-big">
+          Flugbuch.xlsx hochladen
+          <input type="file" accept=".xlsx,.xls" onchange="uploadExcel(this)">
+        </div>
+      `;
+      container.appendChild(welcome);
+    }
+    return;
+  }
+
+  // Remove welcome message if present
+  const welcomeMsg = document.getElementById('welcome-msg');
+  if (welcomeMsg) welcomeMsg.remove();
+
+  let filtered = flights;
+  if (filterRolle) filtered = filtered.filter(f => f.rolle === filterRolle);
+  if (filterSeite === 'none') filtered = filtered.filter(f => !f.seite);
+  else if (filterSeite) filtered = filtered.filter(f => f.seite == filterSeite);
+  if (filterStatus === 'complete') filtered = filtered.filter(f => isComplete(f));
+  if (filterStatus === 'incomplete') filtered = filtered.filter(f => !isComplete(f));
+
+  const tbody = document.getElementById('flights-body');
+  tbody.innerHTML = filtered.map(f => {
+    const complete = isComplete(f);
+    const rolleClass = f.rolle === 'PIC' ? 'set-pic' : f.rolle === 'Dual' ? 'set-dual' : '';
+    const zeitClass = f.zeit === 'Tag' ? 'set-tag' : f.zeit === 'Nacht' ? 'set-nacht' : '';
+    return `<tr class="${complete ? '' : 'unassigned'}" data-id="${f.id}">
+      <td><input type="checkbox" class="row-check" data-id="${f.id}" ${selectedIds.has(f.id) ? 'checked' : ''} onchange="toggleSelect(${f.id}, this.checked)"></td>
+      <td>${f.id}</td>
+      <td>${f.datum}</td>
+      <td>${f.lfz_typ}</td>
+      <td><strong>${f.kennzeichen}</strong></td>
+      <td>${f.crew}</td>
+      <td>${f.von}</td>
+      <td>${f.nach}</td>
+      <td>${f.start}</td>
+      <td>${f.landung}</td>
+      <td class="num">${f.landungen}</td>
+      <td class="num">${secToHM(f.flugstunden_sec)}</td>
+      <td class="num">${secToHM(f.blockzeit_sec)}</td>
+      <td>${f.bemerkung}</td>
+      <td><select class="cell-select ${rolleClass}" onchange="updateField(${f.id}, 'rolle', this.value)">
+        <option value="">--</option>
+        <option value="PIC" ${f.rolle === 'PIC' ? 'selected' : ''}>PIC</option>
+        <option value="Dual" ${f.rolle === 'Dual' ? 'selected' : ''}>Dual</option>
+      </select></td>
+      <td><select class="cell-select ${zeitClass}" onchange="updateField(${f.id}, 'zeit', this.value)">
+        <option value="">--</option>
+        <option value="Tag" ${f.zeit === 'Tag' ? 'selected' : ''}>Tag</option>
+        <option value="Nacht" ${f.zeit === 'Nacht' ? 'selected' : ''}>Nacht</option>
+      </select></td>
+      <td><input type="number" class="page-input" min="1" value="${f.seite || ''}" onchange="updateField(${f.id}, 'seite', this.value ? parseInt(this.value) : null)"></td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleSelect(id, checked) {
+  if (checked) selectedIds.add(id);
+  else selectedIds.delete(id);
+}
+
+function toggleSelectAll() {
+  const checkboxes = document.querySelectorAll('.row-check');
+  const allChecked = [...checkboxes].every(cb => cb.checked);
+  checkboxes.forEach(cb => {
+    cb.checked = !allChecked;
+    const id = parseInt(cb.dataset.id);
+    if (!allChecked) selectedIds.add(id);
+    else selectedIds.delete(id);
+  });
+  document.getElementById('select-all').checked = !allChecked;
+}
+
+function updateField(id, field, value) {
+  const flight = flights.find(f => f.id === id);
+  if (flight) {
+    flight[field] = value;
+    saveFlights();
+    renderCurrentView();
+  }
+}
+
+function renderCurrentView() {
+  const activeTab = document.querySelector('.view-tab.active');
+  if (!activeTab) return;
+  const view = activeTab.dataset.view;
+  if (view === 'flights') renderFlights();
+  else if (view === 'pages') renderPages();
+  else if (view === 'unassigned') renderUnassigned();
+}
+
+function applyBulk() {
+  if (selectedIds.size === 0) return;
+  const rolle = document.getElementById('bulk-rolle').value;
+  const zeit = document.getElementById('bulk-zeit').value;
+  const seite = document.getElementById('bulk-seite').value;
+
+  selectedIds.forEach(id => {
+    const flight = flights.find(f => f.id === id);
+    if (flight) {
+      if (rolle) flight.rolle = rolle;
+      if (zeit) flight.zeit = zeit;
+      if (seite) flight.seite = parseInt(seite);
+    }
+  });
+
+  saveFlights();
+  selectedIds.clear();
+  updateFilterOptions();
+  renderFlights();
+}
+
+function saveAll() {
+  saveFlights();
+  alert('Gespeichert!');
+}
+
+function switchView(view) {
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  document.getElementById('view-flights').classList.toggle('hidden', view !== 'flights');
+  document.getElementById('view-pages').classList.toggle('hidden', view !== 'pages');
+  document.getElementById('view-unassigned').classList.toggle('hidden', view !== 'unassigned');
+
+  if (view === 'flights') renderFlights();
+  if (view === 'pages') renderPages();
+  if (view === 'unassigned') renderUnassigned();
+}
+
+function renderPages() {
+  const container = document.getElementById('view-pages');
+  const pageMap = {};
+
+  flights.forEach(f => {
+    if (!f.seite) return;
+    if (!pageMap[f.seite]) pageMap[f.seite] = [];
+    pageMap[f.seite].push(f);
+  });
+
+  const pageNums = Object.keys(pageMap).map(Number).sort((a, b) => a - b);
+
+  if (pageNums.length === 0) {
+    container.innerHTML = '<div class="banner"><strong>Keine Seiten zugeordnet.</strong> Ordne zuerst Fluege einer Seite zu.</div>';
+    return;
+  }
+
+  const pageSummaries = {};
+  let cumPicSec = 0, cumDualSec = 0, cumLdgTag = 0, cumLdgNacht = 0, cumNachtSec = 0;
+
+  pageNums.forEach(pn => {
+    const pFlights = pageMap[pn];
+    const curPicSec = pFlights.filter(f => f.rolle === 'PIC').reduce((s, f) => s + (f.blockzeit_sec || 0), 0);
+    const curDualSec = pFlights.filter(f => f.rolle === 'Dual').reduce((s, f) => s + (f.blockzeit_sec || 0), 0);
+    const curLdgTag = pFlights.filter(f => f.zeit === 'Tag').reduce((s, f) => s + f.landungen, 0);
+    const curLdgNacht = pFlights.filter(f => f.zeit === 'Nacht').reduce((s, f) => s + f.landungen, 0);
+    const curNachtSec = pFlights.filter(f => f.zeit === 'Nacht').reduce((s, f) => s + (f.blockzeit_sec || 0), 0);
+    const curTotalSec = curPicSec + curDualSec;
+
+    const prevPicSec = cumPicSec;
+    const prevDualSec = cumDualSec;
+    const prevLdgTag = cumLdgTag;
+    const prevLdgNacht = cumLdgNacht;
+    const prevNachtSec = cumNachtSec;
+    const prevTotalSec = cumPicSec + cumDualSec;
+
+    cumPicSec += curPicSec;
+    cumDualSec += curDualSec;
+    cumLdgTag += curLdgTag;
+    cumLdgNacht += curLdgNacht;
+    cumNachtSec += curNachtSec;
+
+    pageSummaries[pn] = {
+      current: { totalSec: curTotalSec, picSec: curPicSec, dualSec: curDualSec, ldgTag: curLdgTag, ldgNacht: curLdgNacht, nachtSec: curNachtSec },
+      previous: { totalSec: prevTotalSec, picSec: prevPicSec, dualSec: prevDualSec, ldgTag: prevLdgTag, ldgNacht: prevLdgNacht, nachtSec: prevNachtSec },
+      total: { totalSec: cumPicSec + cumDualSec, picSec: cumPicSec, dualSec: cumDualSec, ldgTag: cumLdgTag, ldgNacht: cumLdgNacht, nachtSec: cumNachtSec }
+    };
+  });
+
+  container.innerHTML = pageNums.map(pn => {
+    const pFlights = pageMap[pn];
+    const s = pageSummaries[pn];
+    return `
+    <div class="page-section">
+      <div class="page-header">
+        <span>Seite ${pn}</span>
+        <span>${pFlights.length} Fluege</span>
+      </div>
+      <div class="page-body">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>Datum</th><th>LFZ Typ</th><th>Kennzeichen</th><th>Crew</th>
+              <th>Von</th><th>Nach</th><th>Start</th><th>Landung</th>
+              <th>Ldg</th><th>Flugzeit</th><th>Blockzeit</th><th>Rolle</th><th>Tag/Nacht</th><th>Bemerkung</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${pFlights.map(f => `<tr>
+              <td>${f.id}</td>
+              <td>${f.datum}</td>
+              <td>${f.lfz_typ}</td>
+              <td><strong>${f.kennzeichen}</strong></td>
+              <td>${f.crew}</td>
+              <td>${f.von}</td>
+              <td>${f.nach}</td>
+              <td>${f.start}</td>
+              <td>${f.landung}</td>
+              <td class="num">${f.landungen}</td>
+              <td class="num">${secToHM(f.flugstunden_sec)}</td>
+              <td class="num">${secToHM(f.blockzeit_sec)}</td>
+              <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:${f.rolle === 'PIC' ? '#16a34a' : f.rolle === 'Dual' ? '#3b82f6' : '#d1d5db'}"></span>${f.rolle || '-'}</td>
+              <td>${f.zeit || '-'}</td>
+              <td>${f.bemerkung}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+
+        <div class="summary-row">
+          <div class="summary-block">
+            <h4>Diese Seite</h4>
+            <div class="summary-items">
+              <div class="summary-item"><span class="s-label">Totale Flugzeit</span><span class="s-value">${secToHM(s.current.totalSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Ldg Tag</span><span class="s-value">${s.current.ldgTag}</span></div>
+              <div class="summary-item"><span class="s-label">Ldg Nacht</span><span class="s-value">${s.current.ldgNacht}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit Nacht</span><span class="s-value">${secToHM(s.current.nachtSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit PIC</span><span class="s-value">${secToHM(s.current.picSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit Dual</span><span class="s-value">${secToHM(s.current.dualSec)}</span></div>
+            </div>
+          </div>
+          <div class="summary-block">
+            <h4>Uebertrag (vorherige Seiten)</h4>
+            <div class="summary-items">
+              <div class="summary-item"><span class="s-label">Totale Flugzeit</span><span class="s-value">${secToHM(s.previous.totalSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Ldg Tag</span><span class="s-value">${s.previous.ldgTag}</span></div>
+              <div class="summary-item"><span class="s-label">Ldg Nacht</span><span class="s-value">${s.previous.ldgNacht}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit Nacht</span><span class="s-value">${secToHM(s.previous.nachtSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit PIC</span><span class="s-value">${secToHM(s.previous.picSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit Dual</span><span class="s-value">${secToHM(s.previous.dualSec)}</span></div>
+            </div>
+          </div>
+          <div class="summary-block">
+            <h4>Gesamt (inkl. dieser Seite)</h4>
+            <div class="summary-items">
+              <div class="summary-item"><span class="s-label">Totale Flugzeit</span><span class="s-value">${secToHM(s.total.totalSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Ldg Tag</span><span class="s-value">${s.total.ldgTag}</span></div>
+              <div class="summary-item"><span class="s-label">Ldg Nacht</span><span class="s-value">${s.total.ldgNacht}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit Nacht</span><span class="s-value">${secToHM(s.total.nachtSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit PIC</span><span class="s-value">${secToHM(s.total.picSec)}</span></div>
+              <div class="summary-item"><span class="s-label">Blockzeit Dual</span><span class="s-value">${secToHM(s.total.dualSec)}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderUnassigned() {
+  const container = document.getElementById('view-unassigned');
+  const unassigned = flights.filter(f => !f.rolle || !f.zeit || !f.seite);
+
+  if (unassigned.length === 0) {
+    container.innerHTML = flights.length === 0
+      ? '<div class="banner info"><strong>Keine Daten geladen.</strong> Lade zuerst ein Excel-Flugbuch hoch.</div>'
+      : '<div class="banner success"><strong>Alle Fluege sind vollstaendig zugeordnet!</strong></div>';
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="banner"><strong>${unassigned.length} Fluege</strong> sind noch nicht vollstaendig zugeordnet (Rolle, Tag/Nacht oder Seite fehlt).</div>
+    <div class="flight-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>Datum</th><th>LFZ Typ</th><th>Kennzeichen</th><th>Crew</th>
+            <th>Von</th><th>Nach</th><th>Blockzeit</th><th>Ldg</th>
+            <th>Rolle</th><th>Tag/Nacht</th><th>Seite</th><th>Fehlt</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${unassigned.map(f => {
+            const missing = [];
+            if (!f.rolle) missing.push('Rolle');
+            if (!f.zeit) missing.push('Tag/Nacht');
+            if (!f.seite) missing.push('Seite');
+            return `<tr class="unassigned">
+              <td>${f.id}</td>
+              <td>${f.datum}</td>
+              <td>${f.lfz_typ}</td>
+              <td><strong>${f.kennzeichen}</strong></td>
+              <td>${f.crew}</td>
+              <td>${f.von}</td>
+              <td>${f.nach}</td>
+              <td class="num">${secToHM(f.blockzeit_sec)}</td>
+              <td class="num">${f.landungen}</td>
+              <td><select class="cell-select" onchange="updateField(${f.id}, 'rolle', this.value)">
+                <option value="">--</option>
+                <option value="PIC" ${f.rolle === 'PIC' ? 'selected' : ''}>PIC</option>
+                <option value="Dual" ${f.rolle === 'Dual' ? 'selected' : ''}>Dual</option>
+              </select></td>
+              <td><select class="cell-select" onchange="updateField(${f.id}, 'zeit', this.value)">
+                <option value="">--</option>
+                <option value="Tag" ${f.zeit === 'Tag' ? 'selected' : ''}>Tag</option>
+                <option value="Nacht" ${f.zeit === 'Nacht' ? 'selected' : ''}>Nacht</option>
+              </select></td>
+              <td><input type="number" class="page-input" min="1" value="${f.seite || ''}" onchange="updateField(${f.id}, 'seite', this.value ? parseInt(this.value) : null)"></td>
+              <td><span style="color:var(--warning);font-weight:500">${missing.join(', ')}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+loadFlights();
+</script>
+</body>
+</html>
